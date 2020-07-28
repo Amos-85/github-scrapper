@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  github-scrapper:
+    image: amos85/github-scrapper
+    environment:
+      DB_URI: "mongodb://mongodb:mongodb@mongodb:27017"
+      GITHUB_USER: ""
+      GITHUB_PASSWORD: ""
+      GITHUB_SEARCH_USERS: ""
+  
+  mongodb:
+    image: mongo
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: mongodb
+      MONGO_INITDB_ROOT_PASSWORD: mongodb
+      MONGO_INITDB_DATABASE: github
+    ports:
+    - 27017:27017

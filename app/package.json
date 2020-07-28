@@ -1,0 +1,29 @@
+{
+  "name": "github-scrapper",
+  "version": "1.0.0",
+  "description": "Github user Web Scrapper with Chrome Headless & Puppeteer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amos-85/github-scrapper.git"
+  },
+  "keywords": [
+    "Puppeteer",
+    "Chrome",
+    "Headless",
+    "Scrapping"
+  ],
+  "author": "Amos",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Amos-85/github-scrapper/issues"
+  },
+  "homepage": "https://github.com/Amos-85/github-scrapper#readme",
+  "dependencies": {
+    "mongoose": "^5.9.25"
+  },
+  "devDependencies": {}
+}

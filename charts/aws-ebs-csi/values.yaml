@@ -1,0 +1,14 @@
+enableVolumeScheduling: true
+enableVolumeResizing: true
+enableVolumeSnapshot: true
+
+node:
+  kubeletPath: /opt/rke/var/lib/kubelet
+
+resources:
+  requests:
+    cpu: "300m"
+    memory: "512Mi"
+  limits:
+    cpu: "300m"
+    memory: "512Mi"

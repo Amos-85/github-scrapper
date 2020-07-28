@@ -1,0 +1,43 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ include "github-scrapper.fullname" . }}
+  labels:
+    {{- include "github-scrapper.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronSchedule | default "@hourly" | quote }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+          {{- toYaml . | nindent 8 }}
+          {{- end }}
+          serviceAccountName: {{ include "github-scrapper.serviceAccountName" . }}
+          containers:
+          - name: {{ .Chart.Name }}
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+            env:
+            {{- toYaml .Values.env | nindent 12 }}
+            envFrom:
+            - secretRef:
+                name: "github-auth"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            resources:
+          {{- toYaml .Values.resources | nindent 14 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          restartPolicy: {{ .Values.restartPolicy | default "Never" | quote }}

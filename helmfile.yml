@@ -1,0 +1,217 @@
+# repositories:
+# - name: stable
+#   url: https://kubernetes-charts.storage.googleapis.com
+# - name: bitnami
+#   url: https://charts.bitnami.com/bitnami
+# - name: fluent
+#   url: https://fluent.github.io/helm-charts
+# - name: elastic
+#   url: https://helm.elastic.co
+
+helmDefaults:
+  verify: false
+  wait: true
+  historyMax: 10
+  createNamespace: true
+  atomic: true
+  timeout: 600
+
+releases:
+- name: aws-ebs-csi
+  namespace: aws-ebs-csi
+  labels:
+    isDriver: true
+    app: aws-ebs-csi
+#  chart: "/home/amos/IdeaProjects/aws-ebs-csi-driver/aws-ebs-csi-driver"
+  chart: https://github.com/Amos-85/aws-ebs-csi-driver/releases/download/v0.6.0/aws-ebs-csi-driver-0.6.0.tgz
+  version: v0.6.0
+  values:
+  - "charts/aws-ebs-csi/values.yaml"
+  hooks:
+  - events: ["prepare"]
+    showlogs: true
+    command: "kubectl"
+    args: ["apply", "--filename=charts/aws-ebs-csi/storageClass.yaml"]
+  - events: ["preuninstall"]
+    showlogs: true
+    command: "kubectl"
+    args: ["delete", "--filename=charts/aws-ebs-csi/storageClass.yaml"]
+
+- name: github-scrapper
+  namespace: github-scrapper
+  labels:
+    app: github-scrapper
+  chart: charts/github-scrapper
+  values:  
+  - "charts/github-scrapper/values.yaml"
+  - env:
+    - name: DB_URI
+      value: "mongodb://mongodb.mongodb.svc.cluster.local:27017/github"
+    - name: GITHUB_SEARCH_USERS
+      value: ""
+  needs:
+  - mongodb/mongodb
+  - aws-ebs-csi/aws-ebs-csi
+
+- name: mongodb
+  namespace: mongodb
+  labels:
+    app: mongodb
+  chart: bitnami/mongodb
+  version: 8.2.*
+  values:
+  - "charts/mongodb/values.yaml"
+  needs:
+  - aws-ebs-csi/aws-ebs-csi
+
+- name: fluent-bit
+  namespace: fluent-bit
+  labels:
+    app: fluentbit
+  chart: fluent/fluent-bit
+  values:
+  - resources:
+      requests:
+        cpu: 400m
+        memory: 300Mi
+      limits:
+        cpu: 400m
+        memory: 500Mi
+  - config:
+      outputs: |
+        [INPUT]
+            Name tail
+            Path /var/log/containers/*.log
+            Parser docker
+            Tag kube.*
+            Mem_Buf_Limit 300MB
+            Skip_Long_Lines On
+        [OUTPUT]
+            Name es
+            Match kube.*
+            Host elasticsearch-ingest.elasticsearch.svc.cluster.local
+            Logstash_Format On
+            Retry_Limit False
+        [OUTPUT]
+            Name es
+            Match host.*
+            Host elasticsearch-ingest.elasticsearch.svc.cluster.local
+            Logstash_Format On
+            Logstash_Prefix node
+            Retry_Limit False
+  needs:
+  - elasticsearch/elasticsearch-ingest
+  - elasticsearch/elasticsearch-master
+  - elasticsearch/elasticsearch-data
+
+
+- name: elasticsearch-ingest
+  namespace: elasticsearch
+  labels:
+    app: elasticsearch
+    esRole: ingest
+  chart: elastic/elasticsearch
+  values:
+  - imageTag: 7.8.0
+  - nodeGroup: "ingest"
+  - replicas: 2
+  - minimumMasterNodes: 1
+  - roles:
+      master: "false"
+      ingest: "true"
+      data: "false"
+  - esMajorVersion: 7
+  - esJavaOpts: "-Xmx2g -Xms2g"
+  - resources:
+      requests:
+        cpu: "600m"
+        memory: "2Gi"
+      limits:
+        cpu: "1000m"
+        memory: "3Gi"
+  - persistence:
+      enabled: false
+  needs:
+  - elasticsearch/elasticsearch-master
+
+- name: elasticsearch-master
+  namespace: elasticsearch
+  labels:
+    app: elasticsearch
+    esRole: master
+  chart: elastic/elasticsearch
+  values:
+  - imageTag: 7.8.0
+  - nodeGroup: "master"
+  - replicas: 1
+  - roles:
+      master: "true"
+      ingest: "false"
+      data: "false"
+  - esMajorVersion: 7
+  - resources:
+      requests:
+        cpu: "300m"
+        memory: "1Gi"
+      limits:
+        cpu: "300m"
+        memory: "2Gi"
+  - volumeClaimTemplate:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: aws-ebs-csi
+      resources:
+        requests:
+          storage: 30Gi
+  needs:
+  - aws-ebs-csi/aws-ebs-csi
+  
+- name: elasticsearch-data
+  namespace: elasticsearch
+  labels:
+    app: elasticsearch
+    esRole: data
+  chart: elastic/elasticsearch
+  values:
+  - imageTag: 7.8.0
+  - nodeGroup: "data"
+  - replicas: 1
+  - roles:
+      master: "false"
+      ingest: "false"
+      data: "true"
+  - esMajorVersion: 7
+  - resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "500m"
+        memory: "2Gi"
+  - volumeClaimTemplate:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: aws-ebs-csi
+      resources:
+        requests:
+          storage: 50Gi
+  needs:
+  - aws-ebs-csi/aws-ebs-csi
+
+- name: kibana
+  namespace: kibana
+  labels:
+    app: kibana
+  chart: elastic/kibana
+  values:
+  - imageTag: 7.8.0
+  - elasticsearchHosts: "http://elasticsearch-ingest.elasticsearch.svc.cluster.local:9200"
+  - resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+  needs:
+  - elasticsearch/elasticsearch-ingest
+  - elasticsearch/elasticsearch-master
+  - elasticsearch/elasticsearch-data

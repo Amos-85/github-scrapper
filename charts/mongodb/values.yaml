@@ -1,0 +1,20 @@
+global:
+  storageClass: aws-ebs-csi
+architecture: standalone
+useStatefulSet: true
+auth:
+  enabled: false
+  username: mongodb
+  password: mongodb
+  database: github
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+rbac:
+  create: true
+persistence:
+  enabled: false

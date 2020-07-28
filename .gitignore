@@ -1,0 +1,8 @@
+node_modules
+.vscode
+.terraform
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+kube_config_cluster.yml
+rke.tf
