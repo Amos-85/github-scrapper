@@ -2,7 +2,7 @@ version: '3'
 
 services:
   github-scrapper:
-    image: amos85/github-scrapper
+    image: amos85/github-scrapper:1.0.0
     environment:
       DB_URI: "mongodb://mongodb:mongodb@mongodb:27017"
       GITHUB_USER: ""

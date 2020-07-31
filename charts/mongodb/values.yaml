@@ -17,4 +17,4 @@ resources:
 rbac:
   create: true
 persistence:
-  enabled: false
+  enabled: true

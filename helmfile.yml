@@ -1,12 +1,10 @@
-# repositories:
-# - name: stable
-#   url: https://kubernetes-charts.storage.googleapis.com
-# - name: bitnami
-#   url: https://charts.bitnami.com/bitnami
-# - name: fluent
-#   url: https://fluent.github.io/helm-charts
-# - name: elastic
-#   url: https://helm.elastic.co
+repositories:
+- name: bitnami
+  url: https://charts.bitnami.com/bitnami
+- name: fluent
+  url: https://fluent.github.io/helm-charts
+- name: elastic
+  url: https://helm.elastic.co
 
 helmDefaults:
   verify: false
@@ -19,11 +17,11 @@ helmDefaults:
 releases:
 - name: aws-ebs-csi
   namespace: aws-ebs-csi
-  labels:
+  labels:       
     isDriver: true
     app: aws-ebs-csi
-#  chart: "/home/amos/IdeaProjects/aws-ebs-csi-driver/aws-ebs-csi-driver"
   chart: https://github.com/Amos-85/aws-ebs-csi-driver/releases/download/v0.6.0/aws-ebs-csi-driver-0.6.0.tgz
+#  chart: https://github.com/kubernetes-sigs/aws-ebs-csi-driver/releases/download/v0.5.0/helm-chart.tgz
   version: v0.6.0
   values:
   - "charts/aws-ebs-csi/values.yaml"
@@ -31,7 +29,14 @@ releases:
   - events: ["prepare"]
     showlogs: true
     command: "kubectl"
-    args: ["apply", "--filename=charts/aws-ebs-csi/storageClass.yaml"]
+    args: [
+      "apply",
+      "--filename=charts/aws-ebs-csi/storageClass.yaml",
+      "--filename=charts/aws-ebs-csi/snapshotClass.yml",
+      "--filename=https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml",
+      "--filename=https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml",
+      "--filename=https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml"
+    ]
   - events: ["preuninstall"]
     showlogs: true
     command: "kubectl"
@@ -63,6 +68,15 @@ releases:
   - "charts/mongodb/values.yaml"
   needs:
   - aws-ebs-csi/aws-ebs-csi
+  hooks:
+  - events: ["postsync"]
+    showlogs: true
+    command: "kubectl"
+    args: ["apply","-n", "{{`{{.Release.Namespace}}`}}","--filename=charts/mongodb/snapshot-data.yml"]
+  - events: ["preuninstall"]
+    showlogs: true
+    command: "kubectl"
+    args: ["apply", "-n","{{`{{.Release.Namespace}}`}}","--filename=charts/mongodb/snapshot-data.yml"]
 
 - name: fluent-bit
   namespace: fluent-bit
@@ -77,21 +91,37 @@ releases:
       limits:
         cpu: 400m
         memory: 500Mi
+  - extraVolumeMounts:
+    - name: lua-filter
+      mountPath: /fluent-bit/etc/functions.lua
+      subPath: functions.lua
+  - extraVolumes:
+    - name: lua-filter
+      configMap:
+        name: lua-filter
   - config:
-      outputs: |
-        [INPUT]
-            Name tail
-            Path /var/log/containers/*.log
-            Parser docker
-            Tag kube.*
-            Mem_Buf_Limit 300MB
-            Skip_Long_Lines On
+      filters: |-
+          [FILTER]
+              Name kubernetes
+              Match kube.*
+              Merge_Log On
+              Keep_Log Off
+              K8S-Logging.Parser On
+              K8S-Logging.Exclude Off
+          [FILTER]
+              Name    lua
+              Match   kube.*
+              script  /fluent-bit/etc/functions.lua
+              call    dedot
+  - config:
+      outputs: |-      
         [OUTPUT]
             Name es
             Match kube.*
             Host elasticsearch-ingest.elasticsearch.svc.cluster.local
             Logstash_Format On
             Retry_Limit False
+            Replace_Dots True
         [OUTPUT]
             Name es
             Match host.*
@@ -99,6 +129,7 @@ releases:
             Logstash_Format On
             Logstash_Prefix node
             Retry_Limit False
+            Replace_Dots On        
   needs:
   - elasticsearch/elasticsearch-ingest
   - elasticsearch/elasticsearch-master
@@ -201,8 +232,9 @@ releases:
   labels:
     app: kibana
   chart: elastic/kibana
+  version: 7.8.1
   values:
-  - imageTag: 7.8.0
+  - imageTag: 7.8.1
   - elasticsearchHosts: "http://elasticsearch-ingest.elasticsearch.svc.cluster.local:9200"
   - resources:
       requests:
@@ -211,6 +243,9 @@ releases:
       limits:
         cpu: "1000m"
         memory: "2Gi"
+  - extraEnvs:
+    - name: MONITORING_ENABLED
+      value: "false" 
   needs:
   - elasticsearch/elasticsearch-ingest
   - elasticsearch/elasticsearch-master
